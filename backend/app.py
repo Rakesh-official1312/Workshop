@@ -20,10 +20,11 @@ supabase: Client = create_client(supabase_url, supabase_key)
 
 @app.after_request
 def allow_cross_origin_requests(response):
-    # Public, unauthenticated API: any browser origin may call these endpoints.
+    # This API is public and does not use cookies, so wildcard CORS is intentional.
     response.headers["Access-Control-Allow-Origin"] = "*"
     response.headers["Access-Control-Allow-Methods"] = "GET, POST, OPTIONS"
-    response.headers["Access-Control-Allow-Headers"] = "Content-Type"
+    response.headers["Access-Control-Allow-Headers"] = "Content-Type, Accept"
+    response.headers["Access-Control-Max-Age"] = "600"
     return response
 
 

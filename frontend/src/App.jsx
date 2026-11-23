@@ -15,7 +15,7 @@ async function request(apiBase, path, options = {}) {
   if (!apiBase) throw new Error('Set your deployed backend URL in API settings, frontend/config.js, or Vercel’s VITE_API_BASE_URL variable.');
   const response = await fetch(`${apiBase}${path}`, {
     ...options,
-    headers: { 'Content-Type': 'application/json', ...(options.headers || {}) },
+    headers: { Accept: 'application/json', ...(options.body ? { 'Content-Type': 'application/json' } : {}), ...(options.headers || {}) },
   });
   const data = await response.json().catch(() => ({}));
   if (!response.ok) throw new Error(data.error || data.details || `Request failed (${response.status})`);
@@ -69,7 +69,7 @@ function SettingsModal({ apiUrl, userId, onSave, onClose }) {
   );
 }
 
-function EventDetailsModal({ event, registered, onRegister, onClose, registering }) {
+function EventDetailsModal({ event, registered, onRegister, onClose, registering, onAttendees, attendees, loadingAttendees }) {
   const status = statusOf(event);
   const accepting = isOpen(event);
   return (
@@ -78,7 +78,8 @@ function EventDetailsModal({ event, registered, onRegister, onClose, registering
         <div className="modal-head"><div><span className={`badge ${accepting ? 'live' : ''}`}><span className="dot" />{statusLabel(status)}</span><h2 id="modalTitle" className="detail-title">{event.title || 'Untitled event'}</h2><p>Event details from your organizer.</p></div><button className="close" onClick={onClose} aria-label="Close">×</button></div>
         <div className="field"><label>EVENT ID</label><div className="event-id detail-id">{event.id}</div></div>
         <div className="field"><label>CAPACITY</label><div>{event.capacity == null ? 'Not specified' : `${Number(event.capacity).toLocaleString()} places`}</div></div>
-        <div className="modal-actions"><button className="btn" onClick={onClose}>Close</button>{registered ? <button className="btn" disabled>✓ Registered</button> : accepting && <button className="btn primary" disabled={registering} onClick={() => onRegister(event.id)}>{registering ? 'Registering…' : 'Register'}</button>}</div>
+        {attendees && <div className="field"><label>ATTENDEES ({attendees.length})</label>{attendees.length ? attendees.map(row => <div className="event-id" key={row.id}>{row.users?.email || row.user_id}</div>) : <div className="help">No registrations yet.</div>}</div>}
+        <div className="modal-actions"><button className="btn" onClick={onClose}>Close</button>{isUuid(window.localStorage.getItem(STORAGE.user)) && event.organizer_id === window.localStorage.getItem(STORAGE.user) && <button className="btn" disabled={loadingAttendees} onClick={() => onAttendees(event.id)}>{loadingAttendees ? 'Loading…' : 'View attendees'}</button>}{registered ? <button className="btn" disabled>✓ Registered</button> : accepting && <button className="btn primary" disabled={registering} onClick={() => onRegister(event.id)}>{registering ? 'Registering…' : 'Register'}</button>}</div>
       </section>
     </div>
   );
@@ -99,6 +100,8 @@ export default function App() {
   const [toast, setToast] = useState(null);
   const [menuOpen, setMenuOpen] = useState(false);
   const [registeringId, setRegisteringId] = useState('');
+  const [attendees, setAttendees] = useState(null);
+  const [loadingAttendees, setLoadingAttendees] = useState(false);
 
   const notify = useCallback((message, isError = false) => setToast({ message, isError, key: Date.now() }), []);
 
@@ -169,6 +172,31 @@ export default function App() {
     }
   }
 
+  async function loadEventDetails(event) {
+    setAttendees(null);
+    setModal({ type: 'details', event, loading: true });
+    try {
+      const freshEvent = await request(apiUrl, `/api/events/${encodeURIComponent(event.id)}`);
+      setModal(current => current?.type === 'details' ? { ...current, event: freshEvent, loading: false } : current);
+    } catch (requestError) {
+      setModal(current => current?.type === 'details' ? { ...current, loading: false } : current);
+      notify(`Could not refresh event details: ${requestError.message}`, true);
+    }
+  }
+
+  async function loadAttendees(eventId) {
+    if (!isUuid(userId)) { notify('Add your organizer UUID to view attendees.', true); return; }
+    setLoadingAttendees(true);
+    try {
+      const rows = await request(apiUrl, `/api/events/${encodeURIComponent(eventId)}/registrations?user_id=${encodeURIComponent(userId)}`);
+      setAttendees(Array.isArray(rows) ? rows : []);
+    } catch (requestError) {
+      notify(requestError.message, true);
+    } finally {
+      setLoadingAttendees(false);
+    }
+  }
+
   function saveSettings(newApiUrl, newUserId) {
     localStorage.setItem(STORAGE.api, newApiUrl);
     localStorage.setItem(STORAGE.user, newUserId);
@@ -208,7 +236,7 @@ export default function App() {
             <div className="event-grid">
               {loading ? <div className="loading"><div className="loader" />Loading events…</div>
                 : error ? <div className="error-box"><div className="empty-icon">⌁</div><h3>Couldn’t reach the events API</h3><p>{error}</p><button className="btn primary" onClick={load}>Try again</button><p className="help retry-help">Check that the Flask service is running and the API URL in settings is correct.</p></div>
-                  : visibleEvents.length ? visibleEvents.map((event, index) => <EventCard key={event.id || index} event={event} index={index} joined={mineIds.has(String(event.id))} onDetails={selectedEvent => setModal({ type: 'details', event: selectedEvent })} onRegister={registerEvent} registering={registeringId === String(event.id)} />)
+                    : visibleEvents.length ? visibleEvents.map((event, index) => <EventCard key={event.id || index} event={event} index={index} joined={mineIds.has(String(event.id))} onDetails={loadEventDetails} onRegister={registerEvent} registering={registeringId === String(event.id)} />)
                     : <div className="empty"><div className="empty-icon">✧</div><h3>{view === 'mine' && !isUuid(userId) ? 'Add your attendee ID' : 'No events here yet'}</h3><p>{view === 'mine' && !isUuid(userId) ? 'Save the user UUID from your Supabase users table to load your registrations and register for events.' : 'When matching events are available, they’ll show up here.'}</p>{view === 'mine' && !isUuid(userId) && <button className="btn primary" onClick={() => setModal({ type: 'settings', focus: 'profile' })}>Set attendee ID</button>}</div>}
             </div>
           </section>
@@ -216,7 +244,7 @@ export default function App() {
         </div>
       </main>
       {modal?.type === 'settings' && <SettingsModal apiUrl={apiUrl} userId={userId} onSave={saveSettings} onClose={() => setModal(null)} />}
-      {modal?.type === 'details' && <EventDetailsModal event={modal.event} registered={mineIds.has(String(modal.event.id))} onRegister={registerEvent} onClose={() => setModal(null)} registering={registeringId === String(modal.event.id)} />}
+      {modal?.type === 'details' && <EventDetailsModal event={modal.event} registered={mineIds.has(String(modal.event.id))} onRegister={registerEvent} onAttendees={loadAttendees} attendees={attendees} loadingAttendees={loadingAttendees} onClose={() => setModal(null)} registering={registeringId === String(modal.event.id)} />}
       {toast && <div key={toast.key} className={`toast show ${toast.isError ? 'error' : ''}`} role="status" aria-live="polite">{toast.message}</div>}
     </div>
   );

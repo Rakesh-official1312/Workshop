@@ -1,5 +1,5 @@
-// Set this to the public HTTPS URL of the deployed Flask API.
-// Example: window.EVENTPULSE_CONFIG = { API_BASE_URL: "https://events-api.example.com" };
+// Public base URL shown for the deployed Flask API on Render.
+// Keep this in sync if the Render service URL changes.
 window.EVENTPULSE_CONFIG = {
-  API_BASE_URL: ""
+  API_BASE_URL: "https://workshop-sr4n.onrender.com"
 };
