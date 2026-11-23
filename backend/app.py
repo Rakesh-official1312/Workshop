@@ -37,7 +37,20 @@ def valid_uuid(value):
 
 def database_error(error):
     app.logger.exception("Supabase request failed", exc_info=error)
-    return jsonify(error="Database request failed", details=getattr(error, "message", str(error))), 500
+    message = getattr(error, "message", str(error))
+    code = str(getattr(error, "code", "") or "")
+    lowered = message.lower()
+    if code == "42501" or "row-level security" in lowered or "permission denied" in lowered:
+        return jsonify(
+            error="Supabase denied this database operation. Check the Row Level Security policies for the backend key on the affected table.",
+            details=message,
+        ), 403
+    if code == "23503" or "foreign key constraint" in lowered:
+        return jsonify(
+            error="The attendee or event ID does not exist in the database. Check that the attendee UUID is from the users table and the event still exists.",
+            details=message,
+        ), 400
+    return jsonify(error="Database request failed", details=message), 500
 
 
 @app.get("/")
@@ -110,7 +123,8 @@ def create_registration():
     except APIError as error:
         # A unique constraint on (user_id, event_id) also protects concurrent duplicate requests.
         message = getattr(error, "message", str(error)).lower()
-        if "duplicate" in message or "unique" in message:
+        code = str(getattr(error, "code", "") or "")
+        if code == "23505" or "duplicate" in message or "unique" in message:
             return jsonify(error="User is already registered for this event"), 409
         return database_error(error)
 
