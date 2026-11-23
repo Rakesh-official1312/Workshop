@@ -6,9 +6,23 @@ const statusOf = event => String(event?.status || 'unknown').toLowerCase();
 const isOpen = event => ['open', 'published', 'active'].includes(statusOf(event));
 const statusLabel = status => status === 'open' ? 'Open' : status === 'active' ? 'Active' : status === 'published' ? 'Published' : status.charAt(0).toUpperCase() + status.slice(1);
 
+function normalizeApiBase(value) {
+  const base = String(value || '').trim();
+  if (!base) return '';
+  try {
+    const parsed = new URL(base);
+    parsed.pathname = parsed.pathname.replace(/\/api\/?$/i, '').replace(/\/+$/, '');
+    parsed.search = '';
+    parsed.hash = '';
+    return parsed.toString().replace(/\/$/, '');
+  } catch {
+    return base.replace(/\/api\/?$/i, '').replace(/\/+$/, '');
+  }
+}
+
 function getInitialApiUrl() {
   const localDefault = ['localhost', '127.0.0.1'].includes(window.location.hostname) ? 'http://localhost:5000' : '';
-  return (localStorage.getItem(STORAGE.api) || import.meta.env.VITE_API_BASE_URL || window.EVENTPULSE_CONFIG?.API_BASE_URL || localDefault).replace(/\/$/, '');
+  return normalizeApiBase(localStorage.getItem(STORAGE.api) || import.meta.env.VITE_API_BASE_URL || window.EVENTPULSE_CONFIG?.API_BASE_URL || localDefault);
 }
 
 async function request(apiBase, path, options = {}) {
@@ -18,7 +32,10 @@ async function request(apiBase, path, options = {}) {
     headers: { Accept: 'application/json', ...(options.body ? { 'Content-Type': 'application/json' } : {}), ...(options.headers || {}) },
   });
   const data = await response.json().catch(() => ({}));
-  if (!response.ok) throw new Error(data.error || data.details || `Request failed (${response.status})`);
+  if (!response.ok) {
+    const message = [data.error, data.details].filter((value, index, values) => value && values.indexOf(value) === index).join(': ');
+    throw new Error(message || `Request failed (${response.status})`);
+  }
   return data;
 }
 
@@ -58,8 +75,8 @@ function SettingsModal({ apiUrl, userId, onSave, onClose }) {
     <div className="modal-backdrop" onMouseDown={event => { if (event.target === event.currentTarget) onClose(); }}>
       <section className="modal" role="dialog" aria-modal="true" aria-labelledby="modalTitle">
         <div className="modal-head"><div><h2 id="modalTitle">Connection &amp; profile</h2><p>Set the Flask API address and your attendee UUID.</p></div><button className="close" onClick={onClose} aria-label="Close">×</button></div>
-        <form onSubmit={event => { event.preventDefault(); if (draftUser && !isUuid(draftUser.trim())) { setError('Enter a valid user UUID or leave the field empty.'); return; } onSave(draftApi.trim().replace(/\/$/, ''), draftUser.trim()); }}>
-          <div className="field"><label htmlFor="apiField">Backend API URL</label><input id="apiField" type="url" required value={draftApi} onChange={event => setDraftApi(event.target.value)} placeholder="https://your-service.onrender.com" /><span className="help">Local default: http://localhost:5000. Paste the base URL of your deployed Flask service to use it online.</span></div>
+        <form onSubmit={event => { event.preventDefault(); if (draftUser && !isUuid(draftUser.trim())) { setError('Enter a valid user UUID or leave the field empty.'); return; } const normalized = normalizeApiBase(draftApi); if (!/^https?:\/\//i.test(normalized)) { setError('Enter a valid backend URL starting with http:// or https://.'); return; } onSave(normalized, draftUser.trim()); }}>
+          <div className="field"><label htmlFor="apiField">Backend API URL</label><input id="apiField" type="url" required value={draftApi} onChange={event => { setDraftApi(event.target.value); setError(''); }} placeholder="https://your-service.onrender.com" /><span className="help">Paste the backend URL. A trailing /api is also accepted. Local default: http://localhost:5000.</span></div>
           <div className="field"><label htmlFor="userField">Your user UUID</label><input id="userField" type="text" value={draftUser} onChange={event => setDraftUser(event.target.value)} placeholder="00000000-0000-4000-8000-000000000000" autoComplete="off" /><span className="help">Use an existing UUID from your Supabase users table. The API does not provide login.</span></div>
           {error && <p className="form-error" role="alert">{error}</p>}
           <div className="modal-actions"><button className="btn" type="button" onClick={onClose}>Cancel</button><button className="btn primary" type="submit">Save &amp; connect</button></div>
