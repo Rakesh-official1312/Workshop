@@ -21,7 +21,7 @@ window.EVENTPULSE_CONFIG = { API_BASE_URL: "https://your-events-api.example.com"
 
 Use the base URL only; do not append `/api`. The UI can also save the backend URL under **API settings**, which stores it in that browser's local storage. The public config file is served without caching. The Vite variable is embedded in the client build, so changing it in Vercel requires a redeploy.
 
-The backend allows cross-origin `GET`, `POST`, and preflight `OPTIONS` requests from browser origins. The frontend connects to the backend's event list, event detail, registration, personal registration, and organizer attendee routes. This frontend only needs the public API URL; never place Supabase keys or other secrets in `config.js` or browser code.
+The backend allows cross-origin `GET`, `POST`, and preflight `OPTIONS` requests from browser origins. The frontend connects to the backend's event list, event detail, email sign-up/sign-in, registration, personal registration, and organizer attendee routes. Supabase credentials stay on the backend; never put them in `config.js` or browser code. Before enabling account registration, run `backend/supabase_auth_setup.sql` in the Supabase SQL Editor as described in the backend README.
 
 ## Local development
 

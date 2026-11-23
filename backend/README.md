@@ -19,11 +19,17 @@ For local development, create `.env` from `.env.example`, fill in the Supabase v
 
 ## Routes
 
+- `POST /api/auth/signup` with `{ "email": "...", "password": "..." }`
+- `POST /api/auth/login` with `{ "email": "...", "password": "..." }`
+- `POST /api/auth/refresh` with `{ "refresh_token": "..." }`
+- `GET /api/auth/me` with a Supabase bearer token
 - `GET /api/events` (optional `?status=...`)
 - `GET /api/events/<event_id>`
-- `POST /api/registrations` with JSON `{ "user_id": "...", "event_id": "..." }`
-- `GET /api/me/registrations?user_id=...`
-- `GET /api/events/<event_id>/registrations?user_id=...`
+- `POST /api/registrations` with JSON `{ "event_id": "..." }` and a signed-in bearer token
+- `GET /api/me/registrations` with a signed-in bearer token
+- `GET /api/events/<event_id>/registrations` with the organizer's bearer token
 
-The API currently has no authentication. The caller-supplied `user_id` is not verified, so organizer checks do not provide secure access control. CORS allows any origin as configured in `app.py`.
+## Supabase setup for email accounts
+
+Enable Email authentication in Supabase. Then run `supabase_auth_setup.sql` once in the Supabase SQL Editor. It adds the row-level security policies that let authenticated users map their email to a `users` row and read their registrations. A database function validates event status, duplicate registrations, and capacity inside one transaction before inserting. Event reads remain public. If email confirmation is enabled in Supabase, new users must confirm their address before signing in.
 "# Workshop" 
